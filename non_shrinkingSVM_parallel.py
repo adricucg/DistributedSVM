@@ -115,25 +115,25 @@ def fit_SVM_parallel(sess, cls, p, q, type):
                 alpha_low_t = alpha_dictionary[k_low]
 
                 # get the existing values for alpha
-                alpha_up_old = sess.run(tf.gather(alpha_up_t, i_up))
-                alpha_low_old = sess.run(tf.gather(alpha_low_t, i_low))
+                # alpha_up_old = sess.run(tf.gather(alpha_up_t, i_up))
+                # alpha_low_old = sess.run(tf.gather(alpha_low_t, i_low))
 
-                #alpha_get = sess.run([tf.gather(alpha_up_t, i_up), tf.gather(alpha_low_t, i_low)])
+                alpha_get = sess.run([tf.gather(alpha_up_t, i_up), tf.gather(alpha_low_t, i_low)])
 
-                #alpha_up_old = alpha_get[0]
-                #alpha_low_old = alpha_get[1]
+                alpha_up_old = alpha_get[0]
+                alpha_low_old = alpha_get[1]
 
             else:
                 alpha_t = alpha_dictionary[k_up]
 
-                #alpha_get = sess.run(tf.gather(alpha_t, [i_up, i_low]))
+                alpha_get = sess.run(tf.gather(alpha_t, [i_up, i_low]))
 
                 # get the existing values for alpha
-                alpha_up_old = sess.run(tf.gather(alpha_t, i_up))
-                alpha_low_old = sess.run(tf.gather(alpha_t, i_low))
+                # alpha_up_old = sess.run(tf.gather(alpha_t, i_up))
+                # alpha_low_old = sess.run(tf.gather(alpha_t, i_low))
 
-                #alpha_up_old = alpha_get[0]
-                #alpha_low_old = alpha_get[1]
+                alpha_up_old = alpha_get[0]
+                alpha_low_old = alpha_get[1]
 
             print('alpha up old: ', alpha_up_old)
             print('alpha low old: ', alpha_low_old)
@@ -164,13 +164,15 @@ def fit_SVM_parallel(sess, cls, p, q, type):
                 alpha_up_t = alpha_dictionary[k_up]
                 alpha_low_t = alpha_dictionary[k_low]
 
-                #alpha_update = \
-                #    [tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]), tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new])]
+                alpha_update = [
+                    tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]),
+                    tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new])
+                ]
 
-                #sess.run(alpha_update)
+                sess.run(alpha_update)
 
-                sess.run(tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]))
-                sess.run(tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new]))
+                # sess.run(tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]))
+                # sess.run(tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new]))
             else:
                 # assign the new values
 

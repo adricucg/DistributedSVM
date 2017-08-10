@@ -98,15 +98,15 @@ def load_data(start_index, stop_index, cls, type):
         data_X = X[start_index : stop_index]
         data_y = y[cls, start_index: stop_index]
 
-        _x = np.array([[5, 1, 3], [1, 2, 0], [4, 4, 8],
-                        [1, 1, 1], [0.5, 0.5, 0.5], [4, 2, 3],
-                        [2, 1, 0],[1, 2, 0], [6, 7, 9]])
-
-
-        _y = np.array([1, 1, -1, -1, 1, 1, -1, 1, -1])
-
-        data_X = _x[start_index : stop_index]
-        data_y = _y[start_index : stop_index]
+        # _x = np.array([[5, 1, 3], [1, 2, 0], [4, 4, 8],
+        #                 [1, 1, 1], [0.5, 0.5, 0.5], [4, 2, 3],
+        #                 [2, 1, 0],[1, 2, 0], [6, 7, 9]])
+        #
+        #
+        # _y = np.array([1, 1, -1, -1, 1, 1, -1, 1, -1])
+        #
+        # data_X = _x[start_index : stop_index]
+        # data_y = _y[start_index : stop_index]
 
     if type == 'forest':
         X, X_test, y, y_test = load_forest(cls)
