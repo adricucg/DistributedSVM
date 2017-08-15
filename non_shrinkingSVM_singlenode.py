@@ -47,8 +47,6 @@ def fit_SVM_single_worker(sess, cls, q, type):
         b_sum, b_count = compute_b_local(0, C)
         beta = tf.divide(b_sum, tf.to_float(b_count))
 
-        alpha_t = tf.get_variable('alpha_0')
-
         # start session
         sess.run(tf.global_variables_initializer())
 
@@ -62,12 +60,15 @@ def fit_SVM_single_worker(sess, cls, q, type):
                 break
 
             # get the existing values for alpha
-            alpha = sess.run(tf.gather(alpha_t, [i_up, i_low]))
+            # alpha = sess.run(tf.gather(alpha_t, [i_up, i_low]))
+            alpha_t = tf.get_variable('alpha_0')
+
+            alpha = sess.run(alpha_t)
 
             print('alpha: ', alpha)
 
-            alpha_up_old = alpha[0]   #alpha[i_up]
-            alpha_low_old = alpha[1] #alpha[i_low]
+            alpha_up_old = alpha[i_up]
+            alpha_low_old = alpha[i_low]
 
             print('alpha up old: ', alpha_up_old)
             print('alpha low old: ', alpha_low_old)
@@ -93,7 +94,12 @@ def fit_SVM_single_worker(sess, cls, q, type):
             print('alpha low new: ', alpha_low_new)
 
             # assign the new values
-            sess.run(tf.scatter_nd_update(alpha_t, [[i_up], [i_low]], [alpha_up_new, alpha_low_new]))
+            #sess.run(tf.scatter_nd_update(alpha_t, [[i_up], [i_low]], [alpha_up_new, alpha_low_new]))
+
+            alpha[i_up] = alpha_up_new
+            alpha[i_low] = alpha_low_new
+
+            sess.run(alpha_t.assign(alpha))
 
             # compute v_low and v_up
             vup = y_up * (alpha_up_new - alpha_up_old)
