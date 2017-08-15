@@ -27,8 +27,6 @@ def fit_SVM_parallel(sess, cls, p, q, type):
     k_up = 0
     k_low = 0
 
-    alpha_dictionary = {}
-
     print('Start time: {0}'.format(datetime.datetime.now()))
 
     with tf.variable_scope("svm_worker") as scope:
@@ -43,7 +41,7 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
         # TODO these need to be randomly selected ?
         # does the data need to be shuffled?
-        t_data_X, t_data_y = load_data(0, 9, cls, type)
+        t_data_X, t_data_y = load_data(0, 100, cls, type)
 
         i_up = np.where(t_data_y == 1)[0][0]
         i_low = np.where(t_data_y == -1)[0][0]
@@ -89,13 +87,6 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
         beta = tf.divide(b_sum, b_count)
 
-        # setup the alpha variables
-        for k in range(0, p):
-            with tf.device("/job:job1/task:" + str(k)):
-                alpha_tensor = tf.get_variable('alpha_' + str(k))
-
-            alpha_dictionary[k] = alpha_tensor
-
         # initialize the variables
         sess.run(tf.global_variables_initializer())
 
@@ -111,29 +102,27 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
             if k_up != k_low:
 
-                alpha_up_t = alpha_dictionary[k_up]
-                alpha_low_t = alpha_dictionary[k_low]
+                with tf.device("/job:job1/task:" + str(k_up)):
+                    alpha_up_t = tf.get_variable('alpha_' + str(k_up))
 
-                # get the existing values for alpha
-                # alpha_up_old = sess.run(tf.gather(alpha_up_t, i_up))
-                # alpha_low_old = sess.run(tf.gather(alpha_low_t, i_low))
+                with tf.device("/job:job1/task:" + str(k_low)):
+                    alpha_low_t = tf.get_variable('alpha_' + str(k_low))
 
-                alpha_get = sess.run([tf.gather(alpha_up_t, i_up), tf.gather(alpha_low_t, i_low)])
+                alpha_up = sess.run(alpha_up_t)
+                alpha_low = sess.run(alpha_low_t)
 
-                alpha_up_old = alpha_get[0]
-                alpha_low_old = alpha_get[1]
+                alpha_up_old = alpha_up[i_up]
+                alpha_low_old = alpha_low[i_low]
 
             else:
-                alpha_t = alpha_dictionary[k_up]
 
-                alpha_get = sess.run(tf.gather(alpha_t, [i_up, i_low]))
+                with tf.device("/job:job1/task:" + str(k_up)):
+                    alpha_t = tf.get_variable('alpha_' + str(k_up))
 
-                # get the existing values for alpha
-                # alpha_up_old = sess.run(tf.gather(alpha_t, i_up))
-                # alpha_low_old = sess.run(tf.gather(alpha_t, i_low))
+                alpha = sess.run(alpha_t)
 
-                alpha_up_old = alpha_get[0]
-                alpha_low_old = alpha_get[1]
+                alpha_up_old = alpha[i_up]
+                alpha_low_old = alpha[i_low]
 
             print('alpha up old: ', alpha_up_old)
             print('alpha low old: ', alpha_low_old)
@@ -159,25 +148,21 @@ def fit_SVM_parallel(sess, cls, p, q, type):
             print('alpha low new: ', alpha_low_new)
 
             if k_up != k_low:
+
+                alpha_up[i_up] = alpha_up_new
+                alpha_low[i_low] = alpha_low_new
+
                 # assign the new values
-                # assign the new values
-                alpha_up_t = alpha_dictionary[k_up]
-                alpha_low_t = alpha_dictionary[k_low]
+                sess.run(alpha_up_t.assign(alpha_up))
+                sess.run(alpha_low_t.assign(alpha_low))
 
-                alpha_update = [
-                    tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]),
-                    tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new])
-                ]
-
-                sess.run(alpha_update)
-
-                # sess.run(tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]))
-                # sess.run(tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new]))
             else:
                 # assign the new values
 
-                alpha_t = alpha_dictionary[k_up]
-                sess.run(tf.scatter_nd_update(alpha_t, [[i_up], [i_low]], [alpha_up_new, alpha_low_new]))
+                alpha[i_up] = alpha_up_new
+                alpha[i_low] = alpha_low_new
+
+                sess.run(alpha_t.assign(alpha))
 
             # compute v_low and v_up
             vup = y_up * (alpha_up_new - alpha_up_old)
