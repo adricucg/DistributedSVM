@@ -10,7 +10,7 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
     C = 10
     e = 0.001
-    gamma = 0.02
+    gamma = 0.125
     eps = 1e-20
     start_index = 0
     stop_index = q
@@ -38,6 +38,8 @@ def fit_SVM_parallel(sess, cls, p, q, type):
         b_sum = tf.Variable(0.0)
         b_count = tf.Variable(0.0)
         tf.get_variable('total', initializer=tf.constant(0.0))
+        tf.get_variable('x_test', initializer=tf.constant(0.0), validate_shape=False)
+        tf.get_variable('y_test', initializer=tf.constant(0), validate_shape=False)
 
         # TODO these need to be randomly selected ?
         # does the data need to be shuffled?
@@ -254,11 +256,18 @@ def predict_SVM_parallel(sess, b, x_new):
 
 def test_SVM_parallel(sess, b, cls, p, type):
 
-    X_test, y_test = load_test_data(cls, type)
+    X_test, Y_test = load_test_data(cls, type)
+    X_test = X_test.astype(np.float32)
+
+    batch_size = 500
+    epochs = int(len(X_test)/batch_size)
 
     with tf.variable_scope("svm_worker") as scope:
         scope.reuse_variables()
         total = tf.get_variable('total')
+
+        x_test = tf.get_variable('x_test', validate_shape=False)
+        y_test = tf.get_variable('y_test', dtype=tf.int32, validate_shape=False)
 
         for k in range(0, p):
             with tf.device("/job:job1/task:" + str(k)):
@@ -267,7 +276,7 @@ def test_SVM_parallel(sess, b, cls, p, type):
                 Y = tf.get_variable('Y_' + str(k))
 
                 alpha_mult_Y = tf.multiply(alpha, Y)
-                kernel = matrix_kernel_rbf(X_test, X)
+                kernel = matrix_kernel_rbf(x_test, X)
                 term = tf.matmul(kernel, tf.expand_dims(alpha_mult_Y, 1))
 
             total = tf.add(total, term)
@@ -286,13 +295,24 @@ def test_SVM_parallel(sess, b, cls, p, type):
 
     accuracy = tf.divide(tf.to_float(correct_pred), tf.to_float(tf.size(pred_grid)))
 
-    result = sess.run(accuracy)
+    print('Running predictions')
 
-    print('decision: ', sess.run(decision_fn))
-    print('pred_grid: ', sess.run(pred_grid))
-    print('test vector: ', y_test)
-    print('correct pred: ', sess.run(correct_pred))
-    print('Accuracy for class {0}: {1}'.format(cls, result))
+    total_accuracy = 0
+    for i in range(0, epochs):
+
+        _x = X_test[i * batch_size:(i + 1) * batch_size]
+        _y = Y_test[i * batch_size:(i + 1) * batch_size]
+        result = sess.run(accuracy, feed_dict={x_test: _x, y_test: _y})
+
+        #print('decision: ', sess.run(decision_fn, feed_dict={x_test: _x, y_test: _y}))
+        #print('pred_grid: ', sess.run(pred_grid, feed_dict={x_test: _x, y_test: _y}))
+        #print('correct pred: ', sess.run(correct_pred, feed_dict={x_test: _x, y_test: _y}))
+
+        total_accuracy = total_accuracy + result
+
+    final_accuracy = round((total_accuracy/epochs)*100, 2)
+
+    print('Accuracy for class {0}: {1}%'.format(cls, final_accuracy))
 
 
 

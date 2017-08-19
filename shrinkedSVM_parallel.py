@@ -11,7 +11,7 @@ def fit_shrinking_SVM_parallel(sess, cls, p, q, shrinking_counter, type):
 
     C = 10
     e = 0.001
-    gamma = 0.02
+    gamma = 0.125
     eps = 1e-20
     start_index = 0
     stop_index = q
