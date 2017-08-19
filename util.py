@@ -5,6 +5,7 @@ import math as math
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
+
 # Declare function to do reshape/batch multiplication
 def reshape_matmul(mat, batch_size):
 
@@ -54,8 +55,7 @@ def prepare_forest():
     data_y = data[[54]]
     data_X = data.drop([54], axis=1)
     size = len(data)
-    # size = 100
-    #
+
     y = np.zeros(shape=(7, size))
     for i in range(0, size):
          print('iteration: ', i)
@@ -189,16 +189,6 @@ def compute_alpha(alpha_up, alpha_low, y_up, y_low, beta_up, beta_low, eta, C, e
     else:
         print('Eta is positive!: {0}'.format(eta))
         return 0,0
-        # compart = y_low * (beta_up - beta_low) - eta * alpha_low
-        # Lobj = 0.5 * eta * L * L + compart * L
-        # Hobj = 0.5 * eta * H * H + compart * H
-        #
-        # if Lobj > Hobj + eps:
-        #     alpha_low_new = L
-        # elif Lobj < Hobj - eps:
-        #     alpha_low_new = H
-        # else:
-        #     alpha_low_new = alpha_low
 
     # Push alpha_low_new to 0 or C if very close
     if alpha_low_new < ZERO:
