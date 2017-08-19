@@ -159,6 +159,7 @@ def matrix_kernel_rbf(X, Y):
     return pred_kernel
 
 
+# https://github.com/matex-org/matex/blob/master/src/supervised/svm/smo_parallel.cpp
 def compute_alpha(alpha_up, alpha_low, y_up, y_low, beta_up, beta_low, eta, C, eps):
 
     ZERO = 1e-12
