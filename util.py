@@ -137,7 +137,7 @@ def load_test_data(cls, type):
 def kernel_rbf(x_i_data, x_j_data):
 
     # Gaussian (RBF) kernel
-    gamma = tf.constant(-0.125)
+    gamma = tf.constant(-0.02)
     rA = tf.reduce_sum(tf.square(x_i_data))
     rB = tf.reduce_sum(tf.square(x_j_data))
     pairwise = tf.reduce_sum(tf.multiply(2., tf.multiply(x_i_data, x_j_data)))
@@ -149,7 +149,7 @@ def kernel_rbf(x_i_data, x_j_data):
 
 def matrix_kernel_rbf(X, Y):
 
-    gamma = tf.constant(-0.125)
+    gamma = tf.constant(-0.02)
     rA_matrix = tf.reshape(tf.reduce_sum(tf.square(X), 1), [-1, 1])
     rB_matrix = tf.reshape(tf.reduce_sum(tf.square(Y), 1), [-1, 1])
     pred_sq_dist = tf.add(tf.subtract(rA_matrix, tf.multiply(2., tf.matmul(X, tf.transpose(Y)))),
