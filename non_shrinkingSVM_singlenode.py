@@ -39,7 +39,7 @@ def fit_SVM_single_worker(sess, cls, q, type):
         y_up = t_data_y[i_up]  #  1
         y_low = t_data_y[i_low] # -1
 
-        min_gradient, max_gradient, x_iup, x_ilow, target_i_up, target_i_low, iup, ilow = \
+        min_gradient, max_gradient, x_iup, x_ilow, y_i_up, y_i_low, iup, ilow = \
             non_shrinked_svm_worker(start_index, stop_index, 0, x_i_up, x_i_low, v_up, v_low, C, cls, type)
 
         scope.reuse_variables()
@@ -111,7 +111,7 @@ def fit_SVM_single_worker(sess, cls, q, type):
                     [
                         min_gradient, max_gradient,
                         x_iup, x_ilow,
-                        target_i_up, target_i_low,
+                        y_i_up, y_i_low,
                         iup, ilow
                     ],
                     feed_dict={x_i_low: x_low, x_i_up: x_up, v_up: vup, v_low: vlow})
