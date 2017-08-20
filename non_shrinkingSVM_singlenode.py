@@ -13,10 +13,13 @@ def fit_SVM_single_worker(sess, cls, q, type):
     e = 0.001
     eps = 1e-20
     gamma = 0.02
-    start_index = 0
-    stop_index = q
     beta_up = -1
     beta_low = 1
+
+    batch_size = 500
+
+    alpha = np.zeros(q)
+    zero = np.zeros(q)
 
     print('Start time: {0}'.format(datetime.datetime.now()))
 
@@ -26,31 +29,42 @@ def fit_SVM_single_worker(sess, cls, q, type):
         x_i_low = tf.placeholder(tf.float32)
         v_up = tf.placeholder(tf.float32, None)
         v_low = tf.placeholder(tf.float32, None)
+        X = tf.placeholder(tf.float32, None)
+        Y = tf.placeholder(tf.float32, None)
+        a = tf.placeholder(tf.float32, None)
+        g = tf.placeholder(tf.float32, None)
 
-        t_data_X, t_data_y = load_data(0, 100, cls, type)
+        t_data_X, t_data_y = load_data(0, q, cls, type)
 
         i_up = np.where(t_data_y == 1)[0][0]
         i_low = np.where(t_data_y == -1)[0][0]
 
-        # TODO these need to be randomly selected ?
-        # does the data need to be shuffled?
         x_up = t_data_X[i_up]
         x_low = t_data_X[i_low]
         y_up = t_data_y[i_up]  #  1
         y_low = t_data_y[i_low] # -1
 
-        min_gradient, max_gradient, x_iup, x_ilow, target_i_up, target_i_low, iup, ilow = \
-            non_shrinked_svm_worker(start_index, stop_index, 0, x_i_up, x_i_low, v_up, v_low, C, cls, type)
+        gradient = zero - t_data_y
+
+        alpha_0 = tf.get_variable('alpha_0', initializer=tf.zeros(q))
+        Y_0 = tf.get_variable('Y_0', initializer=tf.to_float(tf.constant(t_data_y)))
+        X_0 = tf.get_variable('X_0', initializer=tf.constant(t_data_X))
+
+        gradient_new = single_node_gradient_compute(X, g, x_i_up, x_i_low, v_up, v_low)
+
+        min_gradient, max_gradient, x_iup, x_ilow, target_i_up, target_i_low, iup, ilow \
+            = single_node_svm_worker(X, Y, g, a, C)
 
         scope.reuse_variables()
 
-        b_sum, b_count = compute_b_local(0, C)
+        b_sum, b_count = compute_b_local_sn(C, g, a)
         beta = tf.divide(b_sum, tf.to_float(b_count))
 
         # start session
         sess.run(tf.global_variables_initializer())
 
         epoch = 0
+        i = 0
         while beta_up + 2 * e <= beta_low:
 
             print('Iteration: ', epoch)
@@ -58,12 +72,6 @@ def fit_SVM_single_worker(sess, cls, q, type):
             if i_up == i_low:
                 print('i_up and i_low are the same!')
                 break
-
-            # get the existing values for alpha
-            # alpha = sess.run(tf.gather(alpha_t, [i_up, i_low]))
-            alpha_t = tf.get_variable('alpha_0')
-
-            alpha = sess.run(alpha_t)
 
             print('alpha: ', alpha)
 
@@ -93,19 +101,29 @@ def fit_SVM_single_worker(sess, cls, q, type):
             print('alpha up new: ', alpha_up_new)
             print('alpha low new: ', alpha_low_new)
 
-            # assign the new values
-            #sess.run(tf.scatter_nd_update(alpha_t, [[i_up], [i_low]], [alpha_up_new, alpha_low_new]))
-
             alpha[i_up] = alpha_up_new
             alpha[i_low] = alpha_low_new
-
-            sess.run(alpha_t.assign(alpha))
 
             # compute v_low and v_up
             vup = y_up * (alpha_up_new - alpha_up_old)
             vlow = y_low * (alpha_low_new - alpha_low_old)
 
-            # need here some sort of reduce so you run one session only
+            # reset the batch index so we start again
+            if i == int(q/batch_size):
+                print('Reset the batch index')
+                i = 0
+
+            print('Batch index: ', i)
+
+            _x = t_data_X[i * batch_size:(i + 1) * batch_size]
+            #_y = t_data_y[i * batch_size:(i + 1) * batch_size]
+            _gradient = gradient[i * batch_size:(i + 1) * batch_size]
+
+            gradient_updated = \
+                sess.run(gradient_new, feed_dict={x_i_low: x_low, x_i_up: x_up, v_up: vup, v_low: vlow, X:_x, g:_gradient})
+
+            gradient[i * batch_size:(i + 1) * batch_size] = gradient_updated
+
             result = \
                 sess.run(
                     [
@@ -114,7 +132,7 @@ def fit_SVM_single_worker(sess, cls, q, type):
                         target_i_up, target_i_low,
                         iup, ilow
                     ],
-                    feed_dict={x_i_low: x_low, x_i_up: x_up, v_up: vup, v_low: vlow})
+                    feed_dict={X: t_data_X, Y: t_data_y, a: alpha, g: gradient})
 
             beta_up = result[0]
             beta_low = result[1]
@@ -124,6 +142,7 @@ def fit_SVM_single_worker(sess, cls, q, type):
             all_target_low = result[5]
             all_i_up = result[6]
             all_i_low = result[7]
+            #gradient_updated = result[8]
 
             # update values for the next iteration
             x_up = all_x_up[0][0]
@@ -132,6 +151,9 @@ def fit_SVM_single_worker(sess, cls, q, type):
             y_low = all_target_low[0][0]
             i_up = all_i_up[0][0]
             i_low = all_i_low[0][0]
+
+            #print('gradient updated:', gradient_updated)
+
 
             print('beta up:', beta_up)
             print('beta low: ', beta_low)
@@ -143,9 +165,16 @@ def fit_SVM_single_worker(sess, cls, q, type):
 
             epoch = epoch + 1
 
-        b = sess.run(beta)
+            i = i + 1
 
-        print('b_count: ', sess.run(b_count))
+        b = sess.run(beta, feed_dict={a:alpha, g:gradient})
+
+        # assign the found values for alpha so they are stored in the graph
+        sess.run(alpha_0.assign(alpha))
+        sess.run(Y_0)
+        sess.run(X_0)
+
+        print('b_count: ', sess.run(b_count, feed_dict={a:alpha, g:gradient}))
         print('b is', b)
 
     print('Finish time: {0}'.format(datetime.datetime.now()))

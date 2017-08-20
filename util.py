@@ -75,7 +75,7 @@ def load_forest(cls):
     data = pd.read_csv("FOREST_data/covtype_" + str(cls) + ".csv", header=None)
     data_y = data[[54]]
     data_X = data.drop([54], axis=1)
-    X_train, X_test, y_train, y_test = train_test_split(data_X, data_y, test_size=0.30, random_state=0)
+    X_train, X_test, y_train, y_test = train_test_split(data_X, data_y, test_size=0.20, random_state=0)
 
     return X_train, X_test, y_train, y_test
 
@@ -137,7 +137,7 @@ def load_test_data(cls, type):
 def kernel_rbf(x_i_data, x_j_data):
 
     # Gaussian (RBF) kernel
-    gamma = tf.constant(-0.125)
+    gamma = tf.constant(-0.02)
     rA = tf.reduce_sum(tf.square(x_i_data))
     rB = tf.reduce_sum(tf.square(x_j_data))
     pairwise = tf.reduce_sum(tf.multiply(2., tf.multiply(x_i_data, x_j_data)))
@@ -149,7 +149,7 @@ def kernel_rbf(x_i_data, x_j_data):
 
 def matrix_kernel_rbf(X, Y):
 
-    gamma = tf.constant(-0.125)
+    gamma = tf.constant(-0.02)
     rA_matrix = tf.reshape(tf.reduce_sum(tf.square(X), 1), [-1, 1])
     rB_matrix = tf.reshape(tf.reduce_sum(tf.square(Y), 1), [-1, 1])
     pred_sq_dist = tf.add(tf.subtract(rA_matrix, tf.multiply(2., tf.matmul(X, tf.transpose(Y)))),
@@ -242,3 +242,23 @@ def compute_b_local(worker_index, C):
     count = tf.size(i_0)
 
     return gradient_sum, count
+
+
+def compute_b_local_sn(C, gradient, alpha):
+
+    fn = lambda a: tf.case(
+        pred_fn_pairs=[
+            (tf.logical_and(tf.greater(a, 0.0), tf.less(a, C)), lambda: tf.constant(0))
+        ], default=lambda: tf.constant(-1))
+
+    set_indexes = tf.map_fn(fn, alpha, dtype=tf.int32)
+
+    i_0 = tf.where(tf.equal(set_indexes, 0))
+    gradient_i_0 = tf.gather(gradient, i_0)
+
+    gradient_sum = tf.reduce_sum(gradient_i_0)
+
+    count = tf.size(i_0)
+
+    return gradient_sum, count
+
