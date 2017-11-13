@@ -1,3 +1,4 @@
+# try Tensorflow methods to change the shape of an already initialized tensor
 import tensorflow as tf
 
 sess = tf.InteractiveSession()

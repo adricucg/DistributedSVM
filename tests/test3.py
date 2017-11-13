@@ -1,3 +1,5 @@
+# more Tensorflow methods trying out
+
 import tensorflow as tf
 
 sess = tf.InteractiveSession()

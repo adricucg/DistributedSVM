@@ -1,4 +1,4 @@
-# just to try and run different commands
+# to run and test different Tensorflow commands and methods
 # no actual proper code here
 import numpy as np
 import tensorflow as tf

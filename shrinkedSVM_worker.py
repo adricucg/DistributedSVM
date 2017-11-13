@@ -244,17 +244,4 @@ def reconstruct_gradient(sess, worker_index, p, shrinked_indexes, temp_gradient)
 
     gradient_new = tf.scatter_nd_update(gradient, update_index, gradient_diff)
 
-            # m = sess.run(gradient)
-            # n = sess.run(gradient_new)
-            # z = sess.run(temp_gradient)
-            # y = sess.run(Y_shrinked)
-            # p = sess.run(gradient_diff)
-            #
-            # print(m)
-            # print(z)
-            # print(y)
-            # print(p)
-            # print(n)
-            # print('.....')
-
     return gradient_new

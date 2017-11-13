@@ -97,7 +97,8 @@ def load_data(start_index, stop_index, cls, type):
 
         data_X = X[start_index : stop_index]
         data_y = y[cls, start_index: stop_index]
-
+        
+	# mock data for testing
         # _x = np.array([[5, 1, 3], [1, 2, 0], [4, 4, 8],
         #                 [1, 1, 1], [0.5, 0.5, 0.5], [4, 2, 3],
         #                 [2, 1, 0],[1, 2, 0], [6, 7, 9]])
