@@ -1,32 +1,19 @@
 from util import *
 
+def shrinked_svm_worker(sess, worker_index, active_indeces, x_i_up, x_i_low, v_up, v_low, C):
 
-def shrinked_svm_worker(sess, Y, X, gradient, alpha, worker_index, active_indeces, x_i_up, x_i_low, v_up, v_low, C, no_shrinks):
-
-    # with tf.variable_scope("svm_worker") as scope:
-    #     scope.reuse_variables()
-    #     # example 1:11000
-    #     Y = tf.get_variable('Y_' + str(worker_index))
-    #     X = tf.get_variable('X_' + str(worker_index))
-    #     gradient = tf.get_variable('gradient_old_' + str(worker_index))
-    #     alpha = tf.get_variable('alpha_' + str(worker_index))
+    # example 1:11000
+    Y = tf.get_variable('Y_' + str(worker_index))
+    X = tf.get_variable('X_' + str(worker_index))
+    gradient = tf.get_variable('gradient_old_' + str(worker_index))
+    alpha = tf.get_variable('alpha_' + str(worker_index))
 
     print('all samples shape: ', X.shape)
 
-    Y_active = \
-        tf.get_variable('Y_active_' + str(worker_index) + '_' + str(no_shrinks), initializer=tf.gather(Y, active_indeces))
-    X_active = \
-        tf.get_variable('X_active_' + str(worker_index) + '_' + str(no_shrinks), initializer=tf.gather(X, active_indeces))
-    gradient_active = \
-        tf.get_variable('g_active_' + str(worker_index) + '_' + str(no_shrinks), initializer=tf.gather(gradient, active_indeces))
-    alpha_active = \
-        tf.get_variable('alpha_active_' + str(worker_index) + '_' + str(no_shrinks), initializer=tf.gather(alpha, active_indeces))
-
-    sess.run(tf.global_variables_initializer())
-
-    sess.run([Y_active, X_active, gradient_active, alpha_active])
-
-    #alpha_active = tf.gather(alpha, active_indeces)
+    Y_active =tf.gather(Y, active_indeces)
+    X_active =tf.gather(X, active_indeces)
+    gradient_active = tf.gather(gradient, active_indeces)
+    alpha_active = tf.gather(alpha, active_indeces)
 
     print('active samples shape: ', X_active.shape)
 
@@ -50,9 +37,9 @@ def shrinked_svm_worker(sess, Y, X, gradient, alpha, worker_index, active_indece
     gradient_new = tf.add(gradient_active, term)
 
     # update the main gradient only for the active indexes
-    #update_index = tf.reshape(active_indeces, shape=[len(active_indeces), 1])
-    #gradient_update = tf.scatter_nd_update(gradient, update_index, gradient_new)
-    gradient_cache = gradient_active.assign(gradient_new)
+    update_index = tf.reshape(active_indeces, shape=[len(active_indeces), 1])
+    gradient_update = tf.scatter_nd_update(gradient, update_index, gradient_new)
+    #gradient_cache = gradient_active.assign(gradient_new)
 
     i_0 = tf.where(tf.equal(set_indexes, 0))
     i_1 = tf.where(tf.equal(set_indexes, 1))
@@ -63,15 +50,15 @@ def shrinked_svm_worker(sess, Y, X, gradient, alpha, worker_index, active_indece
     i0_i1_i2 = tf.concat([i_0, i_1, i_2], 0)
     i0_i3_i4 = tf.concat([i_0, i_3, i_4], 0)
 
-    gradient_up = tf.gather(gradient_cache, i0_i1_i2)
-    gradient_low = tf.gather(gradient_cache, i0_i3_i4)
+    gradient_up = tf.gather(gradient_new, i0_i1_i2)
+    gradient_low = tf.gather(gradient_new, i0_i3_i4)
 
     min_g = tf.reduce_min(gradient_up)
     max_g = tf.reduce_max(gradient_low)
 
     # get the actual indexes from the gradient cache
-    select_min_index = tf.reshape(tf.where(tf.equal(gradient_cache, min_g)), [-1])
-    select_max_index = tf.reshape(tf.where(tf.equal(gradient_cache, max_g)), [-1])
+    select_min_index = tf.reshape(tf.where(tf.equal(gradient_new, min_g)), [-1])
+    select_max_index = tf.reshape(tf.where(tf.equal(gradient_new, max_g)), [-1])
 
     index_up = tf.reshape(tf.where(tf.equal(i0_i1_i2, select_min_index)), [-1])
     index_low = tf.reshape(tf.where(tf.equal(i0_i3_i4, select_max_index)), [-1])
@@ -94,18 +81,16 @@ def shrinked_svm_worker(sess, Y, X, gradient, alpha, worker_index, active_indece
     return min_g, max_g, \
            x_i_up_local, x_i_low_local, \
            target_i_up_local, target_i_low_local, \
-           i_local_up, i_local_low
+           i_local_up, i_local_low, \
+           gradient_update
 
 
 # separate the active and shrinked samples
 def shrink_sets(sess, worker_index, C, beta_up, beta_low):
 
-    with tf.variable_scope("svm_worker") as scope:
-        scope.reuse_variables()
-
-        Y = tf.get_variable('Y_' + str(worker_index))
-        gradient = tf.get_variable('gradient_old_' + str(worker_index))
-        alpha = tf.get_variable('alpha_' + str(worker_index))
+    Y = tf.get_variable('Y_' + str(worker_index))
+    gradient = tf.get_variable('gradient_old_' + str(worker_index))
+    alpha = tf.get_variable('alpha_' + str(worker_index))
 
     all_indexes =tf.range(tf.size(Y))
 
@@ -161,9 +146,7 @@ def shrink_sets(sess, worker_index, C, beta_up, beta_low):
     return shrinked_indeces, active_indeces
 
 
-def prepare_shrinked_svm_workers(sess,
-        Y_list, X_list, gradient_list, alpha_list,
-        p, active_indeces_list, x_i_up, x_i_low, v_up, v_low, C, no_shrinks):
+def prepare_shrinked_svm_workers(sess,p, active_indeces_list, x_i_up, x_i_low, v_up, v_low, C):
 
     min_grad_list = []
     max_grad_list= []
@@ -173,16 +156,14 @@ def prepare_shrinked_svm_workers(sess,
     target_i_low_list = []
     i_low_list = []
     i_up_list = []
-    #g_update_list = []
+    g_update_list = []
 
     for k in range(0, p):
         with tf.device("/job:job1/task:" + str(k)):
 
             # this is the actual gradient calculation for each active/non-shrinked data sample
-            min_gradient, max_gradient, x_iup, x_ilow, target_i_up, target_i_low, i_up, i_low \
-                = shrinked_svm_worker(sess,
-                Y_list[k], X_list[k], gradient_list[k], alpha_list[k],
-                k, active_indeces_list[k], x_i_up, x_i_low, v_up, v_low, C, no_shrinks)
+            min_gradient, max_gradient, x_iup, x_ilow, target_i_up, target_i_low, i_up, i_low, g_update \
+                = shrinked_svm_worker(sess, k, active_indeces_list[k], x_i_up, x_i_low, v_up, v_low, C)
 
         # data structures to hold shrinked min/max gradient, samples and indexes for up and low
         # will run this once we reached the shrinking threshold and we shrank the dataset
@@ -194,7 +175,7 @@ def prepare_shrinked_svm_workers(sess,
         target_i_low_list.append(target_i_low)
         i_up_list.append(i_up)
         i_low_list.append(i_low)
-        #g_update_list.append(g_update)
+        g_update_list.append(g_update)
 
     # get shrinked global min and max values
     global_min_g = tf.reduce_min(min_grad_list)
@@ -208,8 +189,8 @@ def prepare_shrinked_svm_workers(sess,
               global_min_g, global_max_g,
               i_min, i_max,
               x_i_up_list, x_i_low_list,
-              target_i_up_list, target_i_low_list]
-              #g_update_list]
+              target_i_up_list, target_i_low_list,
+              g_update_list]
 
     return output
 
@@ -236,34 +217,31 @@ def reconstruct_gradient(sess, worker_index, p, shrinked_indexes, temp_gradient)
 
     #print('temp gradient is: ', sess.run(temp_gradient))
 
-    with tf.variable_scope("svm_worker") as scope:
-        scope.reuse_variables()
+    X = tf.get_variable('X_' + str(worker_index))
+    Y = tf.get_variable('Y_' + str(worker_index))
+    gradient = tf.get_variable('gradient_old_' + str(worker_index))
+    X_shrinked = tf.gather(X, shrinked_indexes)
+    Y_shrinked = tf.gather(Y, shrinked_indexes)
 
-        X = tf.get_variable('X_' + str(worker_index))
-        Y = tf.get_variable('Y_' + str(worker_index))
-        gradient = tf.get_variable('gradient_old_' + str(worker_index))
-        X_shrinked = tf.gather(X, shrinked_indexes)
-        Y_shrinked = tf.gather(Y, shrinked_indexes)
+    for j in range(0, p):
+        with tf.device("/job:job1/task:" + str(j)):
+            alpha = tf.get_variable('alpha_' + str(j))
+            X_j = tf.get_variable('X_' + str(j))
+            Y_j = tf.get_variable('Y_' + str(j))
 
-        for j in range(0, p):
-            with tf.device("/job:job1/task:" + str(j)):
-                alpha = tf.get_variable('alpha_' + str(j))
-                X_j = tf.get_variable('X_' + str(j))
-                Y_j = tf.get_variable('Y_' + str(j))
+            alpha_mult_Y = tf.multiply(alpha, Y_j)
+            kernel = matrix_kernel_rbf(X_shrinked, X_j)
+            term = tf.matmul(kernel, tf.expand_dims(alpha_mult_Y, 1))
 
-                alpha_mult_Y = tf.multiply(alpha, Y_j)
-                kernel = matrix_kernel_rbf(X_shrinked, X_j)
-                term = tf.matmul(kernel, tf.expand_dims(alpha_mult_Y, 1))
+            term = tf.squeeze(term)
 
-                term = tf.squeeze(term)
+        temp_gradient = tf.add(temp_gradient, term)
 
-            temp_gradient = tf.add(temp_gradient, term)
+    gradient_diff = tf.subtract(temp_gradient, Y_shrinked)
 
-        gradient_diff = tf.subtract(temp_gradient, Y_shrinked)
+    update_index = tf.reshape(shrinked_indexes, shape=[len(shrinked_indexes), 1])
 
-        update_index = tf.reshape(shrinked_indexes, shape=[len(shrinked_indexes), 1])
-
-        gradient_new = tf.scatter_nd_update(gradient, update_index, gradient_diff)
+    gradient_new = tf.scatter_nd_update(gradient, update_index, gradient_diff)
 
             # m = sess.run(gradient)
             # n = sess.run(gradient_new)
@@ -279,32 +257,3 @@ def reconstruct_gradient(sess, worker_index, p, shrinked_indexes, temp_gradient)
             # print('.....')
 
     return gradient_new
-
-
-def update_gradient_and_alpha(p, active_indeces_list, no_shrinks):
-
-    g_update_list = []
-    alpha_update_list = []
-
-    for k in range(0, p):
-
-        active_indeces = active_indeces_list[k]
-
-        with tf.device("/job:job1/task:" + str(k)):
-            with tf.variable_scope("svm_worker", reuse=True):
-                gradient = tf.get_variable('gradient_old_' + str(k))
-                alpha = tf.get_variable('alpha_' + str(k))
-            with tf.variable_scope("svm_worker_active", reuse=True) :
-                gradient_active = tf.get_variable('g_active_' + str(k) + '_' + str(no_shrinks))
-                alpha_active = tf.get_variable('alpha_active_' + str(k) + '_' + str(no_shrinks))
-
-            update_index = tf.reshape(active_indeces, shape=[len(active_indeces), 1])
-            gradient_update = tf.scatter_nd_update(gradient, update_index, gradient_active)
-            alpha_update = tf.scatter_nd_update(alpha, update_index, alpha_active)
-
-        g_update_list.append(gradient_update)
-        alpha_update_list.append(alpha_update)
-
-    output = [g_update_list, alpha_update_list]
-
-    return output
