@@ -38,9 +38,6 @@ with tf.variable_scope("svm_worker") as scope:
         print(sess.run(const))
         print(sess.run(gradient_old))
 
-
-
-
     #print(sess.run(min_g, feed_dict={gradient_new: g_new}))
     #print(sess.run(max_g, feed_dict={gradient_new: g_new}))
 

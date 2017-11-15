@@ -10,7 +10,7 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
     C = 10
     e = 0.001
-    gamma = 0.02
+    gamma = 0.125
     eps = 1e-20
     start_index = 0
     stop_index = q
@@ -27,8 +27,6 @@ def fit_SVM_parallel(sess, cls, p, q, type):
     k_up = 0
     k_low = 0
 
-    alpha_dictionary = {}
-
     print('Start time: {0}'.format(datetime.datetime.now()))
 
     with tf.variable_scope("svm_worker") as scope:
@@ -40,10 +38,12 @@ def fit_SVM_parallel(sess, cls, p, q, type):
         b_sum = tf.Variable(0.0)
         b_count = tf.Variable(0.0)
         tf.get_variable('total', initializer=tf.constant(0.0))
+        tf.get_variable('x_test', initializer=tf.constant(0.0), validate_shape=False)
+        tf.get_variable('y_test', initializer=tf.constant(0), validate_shape=False)
 
         # TODO these need to be randomly selected ?
         # does the data need to be shuffled?
-        t_data_X, t_data_y = load_data(0, 9, cls, type)
+        t_data_X, t_data_y = load_data(0, 100, cls, type)
 
         i_up = np.where(t_data_y == 1)[0][0]
         i_low = np.where(t_data_y == -1)[0][0]
@@ -89,13 +89,6 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
         beta = tf.divide(b_sum, b_count)
 
-        # setup the alpha variables
-        for k in range(0, p):
-            with tf.device("/job:job1/task:" + str(k)):
-                alpha_tensor = tf.get_variable('alpha_' + str(k))
-
-            alpha_dictionary[k] = alpha_tensor
-
         # initialize the variables
         sess.run(tf.global_variables_initializer())
 
@@ -111,29 +104,27 @@ def fit_SVM_parallel(sess, cls, p, q, type):
 
             if k_up != k_low:
 
-                alpha_up_t = alpha_dictionary[k_up]
-                alpha_low_t = alpha_dictionary[k_low]
+                with tf.device("/job:job1/task:" + str(k_up)):
+                    alpha_up_t = tf.get_variable('alpha_' + str(k_up))
 
-                # get the existing values for alpha
-                alpha_up_old = sess.run(tf.gather(alpha_up_t, i_up))
-                alpha_low_old = sess.run(tf.gather(alpha_low_t, i_low))
+                with tf.device("/job:job1/task:" + str(k_low)):
+                    alpha_low_t = tf.get_variable('alpha_' + str(k_low))
 
-                #alpha_get = sess.run([tf.gather(alpha_up_t, i_up), tf.gather(alpha_low_t, i_low)])
+                alpha_up = sess.run(alpha_up_t)
+                alpha_low = sess.run(alpha_low_t)
 
-                #alpha_up_old = alpha_get[0]
-                #alpha_low_old = alpha_get[1]
+                alpha_up_old = alpha_up[i_up]
+                alpha_low_old = alpha_low[i_low]
 
             else:
-                alpha_t = alpha_dictionary[k_up]
 
-                #alpha_get = sess.run(tf.gather(alpha_t, [i_up, i_low]))
+                with tf.device("/job:job1/task:" + str(k_up)):
+                    alpha_t = tf.get_variable('alpha_' + str(k_up))
 
-                # get the existing values for alpha
-                alpha_up_old = sess.run(tf.gather(alpha_t, i_up))
-                alpha_low_old = sess.run(tf.gather(alpha_t, i_low))
+                alpha = sess.run(alpha_t)
 
-                #alpha_up_old = alpha_get[0]
-                #alpha_low_old = alpha_get[1]
+                alpha_up_old = alpha[i_up]
+                alpha_low_old = alpha[i_low]
 
             print('alpha up old: ', alpha_up_old)
             print('alpha low old: ', alpha_low_old)
@@ -159,23 +150,21 @@ def fit_SVM_parallel(sess, cls, p, q, type):
             print('alpha low new: ', alpha_low_new)
 
             if k_up != k_low:
+
+                alpha_up[i_up] = alpha_up_new
+                alpha_low[i_low] = alpha_low_new
+
                 # assign the new values
-                # assign the new values
-                alpha_up_t = alpha_dictionary[k_up]
-                alpha_low_t = alpha_dictionary[k_low]
+                sess.run(alpha_up_t.assign(alpha_up))
+                sess.run(alpha_low_t.assign(alpha_low))
 
-                #alpha_update = \
-                #    [tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]), tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new])]
-
-                #sess.run(alpha_update)
-
-                sess.run(tf.scatter_nd_update(alpha_up_t, [[i_up]], [alpha_up_new]))
-                sess.run(tf.scatter_nd_update(alpha_low_t, [[i_low]], [alpha_low_new]))
             else:
                 # assign the new values
 
-                alpha_t = alpha_dictionary[k_up]
-                sess.run(tf.scatter_nd_update(alpha_t, [[i_up], [i_low]], [alpha_up_new, alpha_low_new]))
+                alpha[i_up] = alpha_up_new
+                alpha[i_low] = alpha_low_new
+
+                sess.run(alpha_t.assign(alpha))
 
             # compute v_low and v_up
             vup = y_up * (alpha_up_new - alpha_up_old)
@@ -267,11 +256,18 @@ def predict_SVM_parallel(sess, b, x_new):
 
 def test_SVM_parallel(sess, b, cls, p, type):
 
-    X_test, y_test = load_test_data(cls, type)
+    X_test, Y_test = load_test_data(cls, type)
+    X_test = X_test.astype(np.float32)
+
+    batch_size = 500
+    epochs = int(len(X_test)/batch_size)
 
     with tf.variable_scope("svm_worker") as scope:
         scope.reuse_variables()
         total = tf.get_variable('total')
+
+        x_test = tf.get_variable('x_test', validate_shape=False)
+        y_test = tf.get_variable('y_test', dtype=tf.int32, validate_shape=False)
 
         for k in range(0, p):
             with tf.device("/job:job1/task:" + str(k)):
@@ -280,7 +276,7 @@ def test_SVM_parallel(sess, b, cls, p, type):
                 Y = tf.get_variable('Y_' + str(k))
 
                 alpha_mult_Y = tf.multiply(alpha, Y)
-                kernel = matrix_kernel_rbf(X_test, X)
+                kernel = matrix_kernel_rbf(x_test, X)
                 term = tf.matmul(kernel, tf.expand_dims(alpha_mult_Y, 1))
 
             total = tf.add(total, term)
@@ -299,13 +295,20 @@ def test_SVM_parallel(sess, b, cls, p, type):
 
     accuracy = tf.divide(tf.to_float(correct_pred), tf.to_float(tf.size(pred_grid)))
 
-    result = sess.run(accuracy)
+    print('Running predictions')
 
-    print('decision: ', sess.run(decision_fn))
-    print('pred_grid: ', sess.run(pred_grid))
-    print('test vector: ', y_test)
-    print('correct pred: ', sess.run(correct_pred))
-    print('Accuracy for class {0}: {1}'.format(cls, result))
+    total_accuracy = 0
+    for i in range(0, epochs):
+
+        _x = X_test[i * batch_size:(i + 1) * batch_size]
+        _y = Y_test[i * batch_size:(i + 1) * batch_size]
+        result = sess.run(accuracy, feed_dict={x_test: _x, y_test: _y})
+
+        total_accuracy = total_accuracy + result
+
+    final_accuracy = round((total_accuracy/epochs)*100, 2)
+
+    print('Accuracy for class {0}: {1}%'.format(cls, final_accuracy))
 
 
 
