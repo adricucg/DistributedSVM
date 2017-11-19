@@ -251,3 +251,22 @@ def compute_b_local(worker_index, C):
     count = tf.size(i_0)
 
     return gradient_sum, count
+
+
+def compute_b_local_sn(C, gradient, alpha):
+
+    fn = lambda a: tf.case(
+        pred_fn_pairs=[
+            (tf.logical_and(tf.greater(a, 0.0), tf.less(a, C)), lambda: tf.constant(0))
+        ], default=lambda: tf.constant(-1))
+
+    set_indexes = tf.map_fn(fn, alpha, dtype=tf.int32)
+
+    i_0 = tf.where(tf.equal(set_indexes, 0))
+    gradient_i_0 = tf.gather(gradient, i_0)
+
+    gradient_sum = tf.reduce_sum(gradient_i_0)
+
+    count = tf.size(i_0)
+
+    return gradient_sum, count
